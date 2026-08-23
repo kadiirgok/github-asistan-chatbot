@@ -4,7 +4,7 @@ Bir GitHub kullanıcı adı veya linki ver; sistem o kişinin **repolarını ve 
 
 ## 🔗 Canlı demo
 
-👉 **https://<kullanıcı-adı>-github-asistani.hf.space** _(deploy edince buraya gerçek linki yaz)_
+👉 **https://akadirgok-github-asistani.hf.space**
 
 Yukarıdaki bağlantıya tıklayıp doğrudan deneyebilirsin; kurulum gerekmez. Yerel olarak çalıştırmak için aşağıdaki **Kurulum** bölümüne bak.
 
@@ -153,14 +153,13 @@ app/                   # FastAPI + statik arayüz
 static/                # tek dosyalık web UI
 ```
 
-## Deploy (Hugging Face Spaces — ücretsiz)
+## Deploy (Hugging Face Spaces)
 
 Anahtar GitHub'a **girmez**; uygulama HF Spaces'ta çalışır, kullanıcılar sadece linke tıklar.
-Ücretsiz yol **Gradio** SDK'dır (Docker SDK ücretlidir, gerek yok).
 
-1. Hugging Face'te ücretsiz hesap aç → **New Space** (SDK: **Gradio**, Visibility: **Public**).
+1. Hugging Face'te hesap aç → **New Space** (SDK: **Docker**, Visibility: **Public**).
 2. Space **Settings → Variables and secrets** → `DEEPSEEK_API_KEY` (ve istersen `GROQ_API_KEY`, `GITHUB_TOKEN`) ekle.
-3. Space'i bu GitHub repo'suna bağla (veya Space'in kendi git'ine push et). `app.py` (Gradio) otomatik build edilir.
+3. Space'i bu GitHub repo'suna bağla (veya Space'in kendi git'ine push et). `Dockerfile` otomatik build eder (FastAPI + `static/index.html`).
 4. Deploy bitince linkini README'nin üstündeki **Canlı demo** bölümüne yaz.
 
 ## Notlar / bilinen sınırlar
