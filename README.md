@@ -104,6 +104,10 @@ Tarayıcıda `http://127.0.0.1:8000` aç → GitHub kullanıcı adı/linki yaz �
 
 ## Yapılandırma (`.env`)
 
+> ⚠️ **Güvenlik:** `.env` (gerçek anahtarlar) asla Git'e commit edilmez. `.gitignore` ve
+> `.dockerignore` onu hariç tutar; repoda yalnızca boş değerli `.env.example` şablonu bulunur.
+> Bir anahtar bir kez bile repoya girerse onu sıfırla (rotate) ve yenisini üret.
+
 `.env.example` dosyasını `.env` olarak kopyala; tüm değerler isteğe bağlıdır:
 
 | Değişken | Varsayılan | Açıklama |
@@ -152,6 +156,7 @@ Anahtar GitHub'a **girmez**; uygulama HF Spaces'ta çalışır, kullanıcılar s
 
 ## Notlar / bilinen sınırlar
 
+- Önceki sürümdeki yerel GGUF model arka ucu (llama.cpp) kaldırıldı; uygulama artık yalnızca API (DeepSeek + Groq) kullanır.
 - Çapraz repo karşılaştırma soruları ("A ile B'yi karşılaştır") tek repoya iner.
 - Kod okuma repo başına bir kez yapılır (önbellekli); büyük repolar için `config.py` içindeki `code_max_files` / `code_max_size` sınırları uygulanır.
 - GitHub API token'sız 60 istek/saat ile sınırlıdır; büyük hesaplar için `GITHUB_TOKEN` önerilir.

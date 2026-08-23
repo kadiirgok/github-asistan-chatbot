@@ -2,7 +2,7 @@
 """LLM arka ucu arayüzü.
 
 generate_answer yalnızca bu arayüzü bilir; böylece farklı arka uçlar
-(llama.cpp, DeepSeek vb.) birbirinin yerine takılabilir olur.
+(DeepSeek, Groq vb.) birbirinin yerine takılabilir olur.
 """
 
 from abc import ABC, abstractmethod
