@@ -63,6 +63,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<ChatMessage> _messages = [];
   bool _busy = false;
 
+  final TextEditingController _targetController = TextEditingController();
+  bool _loadingTarget = false;
+  String _loadedHedef = '';
+
   static const List<String> _sampleQuestions = [
     "telco-churn-project nasıl bir proje?",
     "HizmetGelsin'in teknolojileri neler?",
@@ -73,6 +77,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _controller.dispose();
+    _targetController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -117,12 +122,36 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _loadTarget() async {
+    final hedef = _targetController.text.trim();
+    if (hedef.isEmpty || _loadingTarget || _busy) return;
+
+    setState(() => _loadingTarget = true);
+
+    try {
+      final repoSayisi = await ingestTarget(hedef);
+      if (!mounted) return;
+      setState(() => _loadedHedef = hedef);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$repoSayisi repo yüklendi: $hedef')),
+      );
+    } on ChatApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Yüklenemedi: ${e.message}')),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingTarget = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: _buildAppBar(),
       body: Column(
         children: [
+          _buildTargetBar(),
           _buildChips(),
           const Divider(height: 1, thickness: 0.5, color: _border),
           Expanded(child: _buildMessageArea()),
@@ -151,7 +180,9 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const SizedBox(height: 1),
           Text(
-            "Abdulkadir'in projeleri hakkında sor",
+            _loadedHedef.isEmpty
+                ? "Abdulkadir'in projeleri hakkında sor"
+                : '$_loadedHedef yüklendi',
             style: GoogleFonts.inter(fontSize: 13, color: _muted),
           ),
         ],
@@ -159,6 +190,62 @@ class _ChatScreenState extends State<ChatScreen> {
       bottom: const PreferredSize(
         preferredSize: Size.fromHeight(1),
         child: Divider(height: 1, thickness: 0.5, color: _border),
+      ),
+    );
+  }
+
+  Widget _buildTargetBar() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      color: Colors.white,
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _targetController,
+              enabled: !_loadingTarget && !_busy,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _loadTarget(),
+              style: GoogleFonts.inter(fontSize: 14, color: _text),
+              decoration: InputDecoration(
+                hintText: 'GitHub kullanıcı adı veya link',
+                hintStyle: GoogleFonts.inter(fontSize: 14, color: _muted),
+                filled: true,
+                fillColor: const Color(0xFFF2F2F7),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: _border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: _border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: _appleBlue, width: 1.2),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: (_loadingTarget || _busy) ? null : _loadTarget,
+            style: FilledButton.styleFrom(
+              backgroundColor: _appleBlue,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: _loadingTarget
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Text('Yükle',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+          ),
+        ],
       ),
     );
   }

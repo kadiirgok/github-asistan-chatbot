@@ -78,3 +78,31 @@ Future<ChatResponse> sendQuestion(String soru) async {
   final decoded = jsonDecode(utf8.decode(response.bodyBytes));
   return ChatResponse.fromJson(decoded as Map<String, dynamic>);
 }
+
+/// Bir GitHub hedefini (kullanıcı adı / link) backend'e yükletir ve
+/// indekslenen repo sayısını döndürür.
+///
+/// İndeksleme GitHub API + embedding gerektirdiği için uzun sürebilir; zaman
+/// aşımı buna göre büyük tutulur. Hata olursa [ChatApiException] fırlatır.
+Future<int> ingestTarget(String hedef) async {
+  final uri = Uri.parse('$apiBaseUrl/ingest');
+  final http.Response response;
+  try {
+    response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'hedef': hedef}),
+        )
+        .timeout(const Duration(minutes: 5));
+  } catch (_) {
+    throw ChatApiException('Sunucuya ulaşılamadı. Backend çalışıyor mu?');
+  }
+
+  final decoded = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+  if (response.statusCode != 200 || decoded['durum'] != 'tamam') {
+    final mesaj = decoded['mesaj'] as String?;
+    throw ChatApiException(mesaj ?? 'Yükleme hatası (HTTP ${response.statusCode}).');
+  }
+  return decoded['repo_sayisi'] as int? ?? 0;
+}
