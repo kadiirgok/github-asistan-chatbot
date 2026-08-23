@@ -12,6 +12,3 @@ mobile/.dart_tool/
 mobile/.flutter-plugins
 mobile/.flutter-plugins-dependencies
 mobile/*.iml
-
-# Claude Code proje notu (repoda olmasın)
-CLAUDE.md
