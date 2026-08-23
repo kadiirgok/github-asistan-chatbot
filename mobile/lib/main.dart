@@ -64,10 +64,10 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _busy = false;
 
   static const List<String> _sampleQuestions = [
-    "BilgiTR'de hit-rate nedir?",
+    "telco-churn-project nasıl bir proje?",
     "HizmetGelsin'in teknolojileri neler?",
-    "Telco churn'de recall nasıl iyileşti?",
-    "YorumTR'de hangi yöntem daha iyi?",
+    "bilgitr-rag-projesi ne yapıyor?",
+    "hangi dillerde yazılmış?",
   ];
 
   @override

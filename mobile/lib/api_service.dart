@@ -4,13 +4,9 @@ import 'package:http/http.dart' as http;
 
 /// Backend API'nin temel adresi.
 ///
-/// `10.0.2.2` = Android emülatöründen, host makinenin `localhost`'una erişim
-/// için kullanılan özel adres.
-///
-/// GERÇEK bir cihazda test edeceksen bu adresi bilgisayarının ağ IP'si ile
-/// değiştir (ör. `http://192.168.1.20:8000`) ve telefon ile bilgisayarın aynı
-/// ağda olduğundan emin ol.
-const String apiBaseUrl = 'http://10.0.2.2:8000';
+/// Canlı demo Hugging Face Spaces'ta barınıyor; bu adres her yerden
+/// (gerçek cihaz, web vb.) erişilebilir.
+const String apiBaseUrl = 'https://akadirgok-github-asistani.hf.space';
 
 /// `/chat` uç noktasının döndürdüğü yanıtı temsil eden model.
 class ChatResponse {
