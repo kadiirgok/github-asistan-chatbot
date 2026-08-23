@@ -150,6 +150,8 @@ github_rag/            # kütüphane (import edilebilir)
 └── llm/               #   LLM arka ucu (DeepSeek + Groq)
 app/                   # FastAPI + statik arayüz
 static/                # tek dosyalık web UI
+mobile/                # Flutter mobil uygulama
+scripts/               # yardımcı scriptler (check.py = sistem sağlık kontrolü)
 ```
 
 ## Deploy (Hugging Face Spaces)
@@ -163,7 +165,6 @@ Anahtar GitHub'a **girmez**; uygulama HF Spaces'ta çalışır, kullanıcılar s
 
 ## Notlar / bilinen sınırlar
 
-- Önceki sürümdeki yerel GGUF model arka ucu (llama.cpp) kaldırıldı; uygulama artık yalnızca API (DeepSeek + Groq) kullanır.
 - Çapraz repo karşılaştırma soruları ("A ile B'yi karşılaştır") tek repoya iner.
 - Kod okuma repo başına bir kez yapılır (önbellekli); büyük repolar için `config.py` içindeki `code_max_files` / `code_max_size` sınırları uygulanır.
 - GitHub API token'sız 60 istek/saat ile sınırlıdır; büyük hesaplar için `GITHUB_TOKEN` önerilir.
