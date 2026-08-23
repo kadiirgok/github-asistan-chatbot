@@ -84,7 +84,6 @@ print(res["kaynak"])           # "local" | "web" | "none"
 print(res["dogrulandi"])       # doğrulama sonucu
 ```
 
-Yerel `.txt` klasörünü (örnek veri / test) indekslemek için: `GithubRag.from_local_folder("data")`.
 
 ## Web arayüzü
 

@@ -1,4 +1,4 @@
-package com.example.chatbot_asistan
+package com.kadiirgok.chatbot_asistan
 
 import io.flutter.embedding.android.FlutterActivity
 
