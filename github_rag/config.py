@@ -3,7 +3,7 @@
 
 Tüm yapılandırma tek yerde toplanır: LLM sağlayıcıları (DeepSeek/Groq), embedding modeli,
 ChromaDB klasörü, GitHub token'ı ve eşikler. Değer önceliği: açık parametre >
-ortam değişkeni / .env > varsayılan.
+ortam değişkeni > .env > varsayılan.
 """
 
 import os
@@ -65,9 +65,13 @@ def _int_env(env: dict, key: str) -> int | None:
 
 
 def load_config() -> Config:
-    """Ortam değişkenlerinden ve .env dosyasından Config üretir."""
-    env = dict(os.environ)
-    env.update(_load_dotenv())
+    """Ortam değişkenlerinden ve .env dosyasından Config üretir.
+
+    Öncelik: gerçek ortam değişkenleri (örn. HF Spaces Secrets) > .env > varsayılan.
+    .env yalnızca yerel geliştirme kolaylığıdır; ortamda ayarlı bir değer varsa o kazanır.
+    """
+    env = _load_dotenv()
+    env.update(os.environ)
 
     cfg = Config()
     if env.get("GITHUB_RAG_EMBEDDING_MODEL"):

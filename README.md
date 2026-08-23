@@ -120,6 +120,10 @@ Tarayıcıda `http://127.0.0.1:8000` aç → GitHub kullanıcı adı/linki yaz �
 | `GITHUB_RAG_EMBEDDING_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | Çok dilli embedding |
 | `GITHUB_RAG_MAX_TOKENS` | `512` | LLM cevap uzunluğu |
 
+Öncelik sırası **gerçek ortam değişkeni > `.env` > varsayılan** şeklindedir. Deploy'da
+HF Spaces **Secrets** ile tanımladığın değişkenler, `.env`'de ne yazarsa yazsın önce gelir —
+`.env` yalnızca yerel geliştirme içindir.
+
 ## LLM arka ucu (DeepSeek + Groq)
 
 Uygulama OpenAI-uyumlu API'leri kullanır: **DeepSeek birincil, Groq yedek**. Anahtarı
