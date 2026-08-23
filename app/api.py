@@ -98,7 +98,14 @@ class CevapResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"durum": "hazir"}
+    return {
+        "durum": "hazir",
+        "llm": {
+            "deepseek": bool(config.deepseek_api_key),
+            "groq": bool(config.groq_api_key),
+        },
+        "hedef": _load_last_target(),
+    }
 
 
 @app.post("/ingest")

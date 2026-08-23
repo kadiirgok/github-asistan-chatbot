@@ -293,6 +293,31 @@ class GithubRag:
                             ", ".join(f"{a} ({n} repo)" for a, n in alanlar.most_common()))
         return "\n".join(satirlar)
 
+    def _repo_aciklama_cevabi(self, repo_name: str) -> str | None:
+        """Belirli bir reponun metadata açıklamasını yapılandırılmış biçimde döndürür.
+
+        README/kod içerik vermediğinde (örn. yalnızca notebook'tan oluşan repo),
+        GitHub metadata'sındaki description/language/stars ile en azından ne olduğunu
+        söyler; metadata da yoksa None döner (web fallback'e bırakır).
+        """
+        meta = None
+        for m in self.repo_metadata:
+            if m.get("name") == repo_name or (m.get("full_name") or "").split("/")[-1] == repo_name:
+                meta = m
+                break
+        if not meta:
+            return None
+
+        satirlar = [f"**{meta.get('name', repo_name)}**"]
+        if meta.get("description"):
+            satirlar.append(f"- Açıklama: {meta['description'].strip()}")
+        if meta.get("language"):
+            satirlar.append(f"- Dil: {meta['language']}")
+        satirlar.append(f"- Yıldız: {meta.get('stars', 0)}")
+        if meta.get("html_url"):
+            satirlar.append(f"- Bağlantı: {meta['html_url']}")
+        return "\n".join(satirlar)
+
     def profile(self) -> dict:
         """Yapısal özet: /profile uç noktası ve arayüz için."""
         return {
@@ -311,15 +336,29 @@ class GithubRag:
             return {"cevap": "Önce bir GitHub hesabı yükleyin (index()).",
                     "kaynak": "none", "sure_saniye": 0.0, "dogrulandi": False}
 
-        meta = self._meta_cevap(soru)
-        if meta is not None:
-            return {"cevap": meta, "kaynak": "local", "sure_saniye": 0.0, "dogrulandi": True}
+        # Soruda belirli bir repo adı geçiyor mu? (takip bağlamı değil, doğrudan sorudan)
+        acik_focus = self._find_focus(soru)
+
+        # Belirli bir repo adı yoksa, genel profil sorularını deterministik yanıtla
+        # ("kaç repo var?", "hangi diller?" gibi). Repo adı geçiyorsa genel özete
+        # atlamaz; soru o repoya dairdir, RAG'a gider.
+        if acik_focus is None:
+            meta = self._meta_cevap(soru)
+            if meta is not None:
+                return {"cevap": meta, "kaynak": "local", "sure_saniye": 0.0, "dogrulandi": True}
+
+        # LLM anahtarı yoksa net bir yönlendirme döndür (uygulama yine de açılır).
+        if not (self.config.deepseek_api_key or self.config.groq_api_key):
+            return {"cevap": "Cevap üretmek için bir LLM anahtarı gerekli. `.env` dosyasına "
+                             "DEEPSEEK_API_KEY (ve/veya GROQ_API_KEY) ekleyin. Repo sayısı, "
+                             "dil dağılımı gibi özet sorular anahtarsız çalışır.",
+                    "kaynak": "none", "sure_saniye": 0.0, "dogrulandi": False}
 
         t0 = time.time()
         cfg = self.config
 
         # Odak repo: sorudaki ad, yoksa önceki sorunun reposu (takip sorusu).
-        focus = self._find_focus(soru) or self.son_repo
+        focus = acik_focus or self.son_repo
         if focus is not None:
             self.son_repo = focus
         source_filter = focus[1] if focus else None
@@ -351,7 +390,14 @@ class GithubRag:
         if res is not None:
             return self._yanit(res, t0)
 
-        # 4) Web fallback
+        # 4) Repo adı biliniyor ama README/kod içerik vermediyse: metadata açıklamasına düş.
+        if focus:
+            meta_desc = self._repo_aciklama_cevabi(focus[1])
+            if meta_desc is not None:
+                return {"cevap": meta_desc, "kaynak": "local",
+                        "sure_saniye": round(time.time() - t0, 3), "dogrulandi": True}
+
+        # 5) Web fallback
         return self._yanit(
             answer_from_web(self.llm, soru, self.bilinen_anahtarlar, cfg.max_tokens), t0)
 

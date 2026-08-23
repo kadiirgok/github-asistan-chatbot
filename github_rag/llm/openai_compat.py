@@ -6,10 +6,24 @@ model değişir. `repeat_penalty` arayüzde tutulur ama gönderilmez: OpenAI-uyu
 bilinmeyen alanları reddeder.
 """
 
+import re
+
 import requests
 
 from .base import LLMBackend
 from .errors import LLMFatalError, LLMRetryableError
+
+
+def _strip_think(content: str) -> str:
+    """Akıl yürütme modellerinin (Qwen3 vb.) <think>...</think> bloğunu ayıklar.
+
+    Bu modeller cevabın başına düşünme sürecini <think> etiketleri içinde yazar;
+    kullanıcıya yalnızca asıl cevap gösterilmelidir.
+    """
+    content = re.sub(r"<think>.*?</think>", "", content or "", flags=re.DOTALL)
+    # Kapanış etiketi olmadan kesilen düşünme bloğunu da temizle.
+    content = re.sub(r"<think>.*$", "", content or "", flags=re.DOTALL)
+    return content.strip()
 
 
 class OpenAICompatBackend(LLMBackend):
@@ -53,6 +67,7 @@ class OpenAICompatBackend(LLMBackend):
             content = resp.json()["choices"][0]["message"]["content"]
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise LLMRetryableError("Bozuk yanıt gövdesi") from exc
+        content = _strip_think(content)
         if not content or not content.strip():
             # Reasoning modelleri bazen yalnızca "düşünüp" boş content dönebilir;
             # bunu retryable say ki yedek zincir yeniden denesin.

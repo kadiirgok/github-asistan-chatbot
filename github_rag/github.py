@@ -5,6 +5,7 @@ GitHub REST API'si kullanılır (web scraping yok). Opsiyonel GITHUB_TOKEN ile
 saatlik istek limiti 60'tan 5000'e çıkar; token yoksa da temel kullanım çalışır.
 """
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -185,7 +186,7 @@ CODE_EXTENSIONS = {
     ".py", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs",
     ".dart", ".java", ".kt", ".kts", ".go", ".rs", ".cs", ".cpp", ".c", ".h", ".hpp",
     ".rb", ".php", ".swift", ".sh", ".vue", ".sql", ".html", ".css", ".scss",
-    ".yaml", ".yml", ".toml", ".md",
+    ".yaml", ".yml", ".toml", ".md", ".ipynb",
 }
 
 # Devasa repolarda gereksiz dizinleri dışarıda bırak (build ürünleri, bağımlılıklar).
@@ -212,6 +213,31 @@ def fetch_code_file(owner: str, repo: str, branch: str, path: str) -> str | None
     if resp.status_code != 200:
         return None
     return resp.text
+
+
+def _ipynb_to_text(text: str) -> str:
+    """.ipynb (JSON) dosyasını okunabilir metne çevirir: markdown + kod hücreleri.
+
+    Ham JSON hem token açısından verimsizdir hem de LLM için gürültülüdür; bu yüzden
+    yalnızca hücrelerin kaynak metinleri (markdown açıklama + kod) birleştirilir.
+    Çıktılar (outputs) ve metadata atılır.
+    """
+    try:
+        nb = json.loads(text)
+    except (ValueError, TypeError):
+        return text
+    parcalar = []
+    for cell in nb.get("cells", []):
+        kaynak = cell.get("source", [])
+        if isinstance(kaynak, str):
+            kaynak = [kaynak]
+        icerik = "".join(kaynak).strip()
+        if not icerik:
+            continue
+        tip = cell.get("cell_type", "")
+        etiket = "## (markdown)" if tip == "markdown" else "# (kod)" if tip == "code" else ""
+        parcalar.append(f"{etiket}\n{icerik}".strip())
+    return "\n\n".join(parcalar)
 
 
 def ingest_code(owner: str, repo: str, token: str = "",
@@ -256,6 +282,8 @@ def ingest_code(owner: str, repo: str, token: str = "",
     def _fetchet(p):
         path, _size = p
         text = fetch_code_file(owner, repo, branch, path)
+        if text and Path(path).suffix.lower() == ".ipynb":
+            text = _ipynb_to_text(text)
         return path, text
 
     with ThreadPoolExecutor(max_workers=8) as ex:

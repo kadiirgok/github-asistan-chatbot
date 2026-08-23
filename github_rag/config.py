@@ -36,6 +36,17 @@ def _load_dotenv(path: Path | None = None) -> dict[str, str]:
     return out
 
 
+def _ensure_env_file() -> None:
+    """.env yoksa .env.example'dan kopyalar (ilk çalıştırma deneyimini kolaylaştırır)."""
+    env_path = PROJECT_ROOT / ".env"
+    example_path = PROJECT_ROOT / ".env.example"
+    if not env_path.is_file() and example_path.is_file():
+        try:
+            env_path.write_text(example_path.read_text(encoding="utf-8"), encoding="utf-8")
+        except OSError:
+            pass
+
+
 @dataclass
 class Config:
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
@@ -45,7 +56,7 @@ class Config:
     deepseek_api_key: str = ""
     deepseek_model: str = "deepseek-chat"
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-20b"
     llm_timeout: int = 120
     llm_retries: int = 1
     distance_threshold: float = DEFAULT_DISTANCE_THRESHOLD
@@ -70,6 +81,7 @@ def load_config() -> Config:
     Öncelik: gerçek ortam değişkenleri (örn. HF Spaces Secrets) > .env > varsayılan.
     .env yalnızca yerel geliştirme kolaylığıdır; ortamda ayarlı bir değer varsa o kazanır.
     """
+    _ensure_env_file()
     env = _load_dotenv()
     env.update(os.environ)
 

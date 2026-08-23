@@ -15,3 +15,6 @@ requests
 
 # Web arama fallback: DuckDuckGo arama kütüphanesi (API key gerektirmez, ücretsiz)
 ddgs
+
+# Web arayüzü (HF Spaces ücretsiz Gradio deploy)
+gradio

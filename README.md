@@ -65,6 +65,10 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+`.env` ilk çalıştırmada `.env.example`'dan otomatik oluşturulur. İçine kendi `DEEPSEEK_API_KEY`
+değerini yapıştır; anahtarsız da uygulama açılır ve repo listesi/dil dağılımı soruları çalışır
+(yalnızca LLM cevabı anahtar ister).
+
 ## Kütüphane olarak kullanım
 
 ```python
@@ -115,7 +119,7 @@ Tarayıcıda `http://127.0.0.1:8000` aç → GitHub kullanıcı adı/linki yaz �
 | `DEEPSEEK_API_KEY` | (yok) | DeepSeek API anahtarı (birincil) |
 | `DEEPSEEK_MODEL` | `deepseek-chat` | DeepSeek modeli |
 | `GROQ_API_KEY` | (yok) | Groq API anahtarı (yedek, boş bırakılabilir) |
-| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq modeli |
+| `GROQ_MODEL` | `openai/gpt-oss-20b` | Groq modeli |
 | `GITHUB_TOKEN` | (yok) | GitHub API limitini 60/saat → 5000/saat yapar |
 | `GITHUB_RAG_EMBEDDING_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | Çok dilli embedding |
 | `GITHUB_RAG_MAX_TOKENS` | `512` | LLM cevap uzunluğu |
@@ -149,13 +153,14 @@ app/                   # FastAPI + statik arayüz
 static/                # tek dosyalık web UI
 ```
 
-## Deploy (Hugging Face Spaces)
+## Deploy (Hugging Face Spaces — ücretsiz)
 
 Anahtar GitHub'a **girmez**; uygulama HF Spaces'ta çalışır, kullanıcılar sadece linke tıklar.
+Ücretsiz yol **Gradio** SDK'dır (Docker SDK ücretlidir, gerek yok).
 
-1. Hugging Face'te ücretsiz hesap aç → **New Space** (SDK: **Docker**, Visibility: **Public**).
+1. Hugging Face'te ücretsiz hesap aç → **New Space** (SDK: **Gradio**, Visibility: **Public**).
 2. Space **Settings → Variables and secrets** → `DEEPSEEK_API_KEY` (ve istersen `GROQ_API_KEY`, `GITHUB_TOKEN`) ekle.
-3. Space'i bu GitHub repo'suna bağla (veya Space'in kendi git'ine push et). `Dockerfile` otomatik build eder.
+3. Space'i bu GitHub repo'suna bağla (veya Space'in kendi git'ine push et). `app.py` (Gradio) otomatik build edilir.
 4. Deploy bitince linkini README'nin üstündeki **Canlı demo** bölümüne yaz.
 
 ## Notlar / bilinen sınırlar
