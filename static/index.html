@@ -3,12 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CV Asistanı</title>
+<title>GitHub Asistanı</title>
 
 <!-- Inter fontu (Google Fonts CDN) -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Markdown render + XSS koruması (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 
 <style>
   :root {
@@ -42,69 +46,145 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* --- Sohbet kutusu: masaüstünde max-width ile ortalanır, mobilde tam genişlik --- */
   .app {
     width: 100%;
-    max-width: 760px;
+    max-width: 1200px;
     height: 100vh;
     height: 100dvh;
     margin: 0 auto;
     background: var(--surface);
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     box-shadow: 0 0 0 1px rgba(0,0,0,.03), 0 8px 40px rgba(0,0,0,.06);
   }
-  @media (max-width: 760px) {
+  @media (max-width: 900px) {
     .app { box-shadow: none; }
   }
 
-  /* --- Üst çubuk: sade, ince alt çizgili --- */
+  /* --- Sol panel: profil + repo listesi --- */
+  .panel {
+    width: 300px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--hairline);
+    background: #FAFAFC;
+    overflow-y: auto;
+    padding: 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .panel::-webkit-scrollbar { width: 6px; }
+  .panel::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 3px; }
+
+  .panel-title { font-size: 16px; font-weight: 700; word-break: break-word; }
+  .panel-stat { font-size: 13px; color: var(--muted); margin-top: 3px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    background: #EAF2FF; color: var(--blue);
+    border-radius: 999px; padding: 2px 9px; font-size: 11.5px; font-weight: 500;
+  }
+  .panel-section-title {
+    font-size: 11px; font-weight: 600; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .repo-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .repo-item { padding: 8px 10px; background: #fff; border: 1px solid var(--hairline); border-radius: 10px; }
+  .repo-name { font-size: 14px; font-weight: 600; color: var(--text); text-decoration: none; word-break: break-word; }
+  .repo-name:hover { color: var(--blue); }
+  .repo-meta { display: flex; gap: 8px; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+  .repo-lang { color: var(--blue); }
+  .repo-desc { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+
+  .refresh-btn {
+    border: 1px solid var(--hairline);
+    background: #fff;
+    color: var(--text);
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .refresh-btn:hover { background: var(--input-bg); border-color: #c0c0c6; }
+  .refresh-btn:disabled { opacity: .5; cursor: default; }
+  .refresh-status { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 15px; }
+
+  /* --- Ana kolon --- */
+  .main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* --- Üst çubuk --- */
   .topbar {
     padding: 14px 16px 12px;
     border-bottom: 1px solid var(--hairline);
     flex-shrink: 0;
   }
+  .topbar-row { display: flex; align-items: center; gap: 10px; }
   .topbar h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
   .topbar .subtitle { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
 
-  /* --- Örnek soru chip'leri --- */
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 12px 16px;
+  .menu-btn {
+    display: none;
+    width: 36px; height: 36px;
     flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    border-radius: 8px;
   }
-  .chip {
+  .menu-btn:hover { background: rgba(0,0,0,.05); }
+
+  /* --- GitHub hedefi giriş çubuğu --- */
+  .targetbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--hairline);
+    flex-shrink: 0;
     background: var(--surface);
-    color: var(--blue);
-    border: 1px solid var(--hairline);
-    border-radius: 999px;
-    padding: 8px 14px;
-    font-size: 13px;
-    font-weight: 500;
+  }
+  .targetbar input {
+    flex: 1;
+    background: var(--input-bg);
+    border: 1px solid #E0E0E5;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--text);
+    outline: none;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .targetbar input::placeholder { color: var(--muted); }
+  .targetbar input:focus { border-color: var(--blue); background: #fff; }
+  .targetbar input:disabled { opacity: .6; }
+
+  .load-btn {
+    flex-shrink: 0;
+    border: none;
+    border-radius: 10px;
+    background: var(--blue);
+    color: #fff;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
     font-family: inherit;
     cursor: pointer;
-    box-shadow: 0 1px 3px rgba(0,0,0,.06);
-    transition: transform .15s ease, box-shadow .15s ease, background .15s ease,
-                border-color .15s ease, opacity .15s ease;
+    transition: background .15s ease, transform .1s ease;
   }
-  .chip:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 3px 8px rgba(0,0,0,.10);
-    border-color: var(--blue);
-    background: #F2F7FF;
-  }
-  .chip:active { transform: translateY(0) scale(.97); box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-  .chip:disabled {
-    opacity: .45;
-    cursor: default;
-    transform: none;
-    box-shadow: none;
-    border-color: var(--hairline);
-    background: var(--surface);
-    color: var(--muted);
-  }
+  .load-btn:hover { background: var(--blue-press); }
+  .load-btn:active { transform: scale(.97); }
+  .load-btn:disabled { background: var(--blue-disabled); cursor: default; transform: none; }
 
   /* --- Mesaj alanı --- */
   .chat {
@@ -120,7 +200,6 @@
   .chat::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 3px; }
   .chat::-webkit-scrollbar-track { background: transparent; }
 
-  /* --- Boş durum: ortalanmış karşılama --- */
   .empty-state {
     flex: 1;
     display: flex;
@@ -143,7 +222,6 @@
   .empty-state h2 { margin: 0; font-size: 20px; font-weight: 600; color: var(--text); }
   .empty-state p { margin: 0; max-width: 360px; font-size: 14px; line-height: 1.55; color: var(--muted); }
 
-  /* --- Mesaj balonları --- */
   .msg-row {
     display: flex;
     flex-direction: column;
@@ -165,20 +243,64 @@
   .msg-row.user .bubble {
     background: var(--user-bubble);
     color: #fff;
-    border-bottom-right-radius: 5px;   /* sağ-alt köşe hafif keskin */
+    border-bottom-right-radius: 5px;
   }
   .msg-row.assistant .bubble {
     background: var(--asst-bubble);
     color: var(--text);
-    border-bottom-left-radius: 5px;    /* sol-alt köşe hafif keskin */
+    border-bottom-left-radius: 5px;
+    white-space: normal;   /* Markdown içerik düzgün aksın */
   }
+
+  /* Markdown içeriği stilleri */
+  .msg-row.assistant .bubble p { margin: 0 0 8px; }
+  .msg-row.assistant .bubble p:last-child { margin-bottom: 0; }
+  .msg-row.assistant .bubble ul, .msg-row.assistant .bubble ol { margin: 0 0 8px; padding-left: 20px; }
+  .msg-row.assistant .bubble h1, .msg-row.assistant .bubble h2,
+  .msg-row.assistant .bubble h3, .msg-row.assistant .bubble h4 { margin: 10px 0 6px; }
+  .msg-row.assistant .bubble a { color: var(--blue); }
+  .msg-row.assistant .bubble blockquote {
+    margin: 8px 0; padding-left: 12px;
+    border-left: 3px solid var(--hairline); color: var(--muted);
+  }
+  .msg-row.assistant .bubble code {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 13px;
+  }
+  .msg-row.assistant .bubble :not(pre) > code {
+    background: rgba(0,0,0,.08); padding: 1px 5px; border-radius: 4px;
+  }
+  .msg-row.assistant .bubble pre {
+    background: #1C1C1E; color: #fff;
+    padding: 10px 12px; border-radius: 8px;
+    overflow-x: auto; font-size: 13px; line-height: 1.4;
+  }
+  .msg-row.assistant .bubble pre code { background: none; padding: 0; color: inherit; }
+  .msg-row.assistant .bubble table { border-collapse: collapse; margin: 8px 0; font-size: 13px; }
+  .msg-row.assistant .bubble th, .msg-row.assistant .bubble td { border: 1px solid var(--hairline); padding: 5px 8px; }
+  .msg-row.assistant .bubble th { background: rgba(0,0,0,.04); }
+
+  .copy-btn {
+    align-self: flex-start;
+    margin-top: 5px;
+    border: 1px solid var(--hairline);
+    background: #fff;
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  .copy-btn:hover { color: var(--text); border-color: #c0c0c6; }
 
   @keyframes msg-in {
     from { opacity: 0; transform: translateY(10px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  /* --- Kaynak / doğrulama rozeti (pill) --- */
+  /* --- Kaynak / doğrulama rozeti --- */
   .badge {
     display: inline-flex;
     align-items: center;
@@ -196,7 +318,6 @@
   .badge-icon { display: inline-flex; }
   .badge-icon svg { display: block; }
 
-  /* --- Yazıyor... göstergesi (üç zıplayan nokta) --- */
   .typing-dots { display: inline-flex; align-items: center; gap: 5px; padding: 3px 2px; }
   .typing-dots .dot {
     width: 7px; height: 7px;
@@ -254,55 +375,108 @@
   .send-btn:hover { background: var(--blue-press); }
   .send-btn:active { transform: scale(.92); }
   .send-btn:disabled { background: var(--blue-disabled); cursor: default; transform: none; }
+
+  /* --- Dar ekran: panel çekmeceye dönüşür --- */
+  .backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.3);
+    z-index: 15;
+  }
+  @media (max-width: 900px) {
+    .menu-btn { display: inline-flex; }
+    .panel {
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
+      width: 280px;
+      z-index: 20;
+      transform: translateX(-100%);
+      transition: transform .25s ease;
+      box-shadow: 0 0 40px rgba(0,0,0,.2);
+    }
+    .panel.open { transform: translateX(0); }
+    .backdrop.show { display: block; }
+  }
 </style>
 </head>
 <body>
 <div class="app">
-  <header class="topbar">
-    <h1>CV Asistanı</h1>
-    <p class="subtitle">Abdulkadir'in projeleri hakkında sor</p>
-  </header>
-
-  <div class="chips" id="chips">
-    <button class="chip">BilgiTR'de hit-rate nedir?</button>
-    <button class="chip">HizmetGelsin'in teknolojileri neler?</button>
-    <button class="chip">Telco churn'de recall nasıl iyileşti?</button>
-    <button class="chip">YorumTR'de hangi yöntem daha iyi?</button>
-  </div>
-
-  <main class="chat" id="chat">
-    <div class="empty-state" id="emptyState">
-      <div class="empty-icon">
-        <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="#007AFF"
-             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-        </svg>
-      </div>
-      <h2>Merhaba 👋</h2>
-      <p>Abdulkadir'in projeleri (BilgiTR, YorumTR, HizmetGelsin, Telco&nbsp;Churn) hakkında soru sorabilirsin. Yukarıdaki örneklerden birine tıklayarak başlayabilirsin.</p>
+  <aside class="panel" id="panel">
+    <div id="profileSummary"></div>
+    <div>
+      <button id="refreshBtn" class="refresh-btn">Güncelle</button>
+      <div id="refreshStatus" class="refresh-status"></div>
     </div>
-  </main>
+    <div class="panel-section-title">Repolar</div>
+    <div id="repoList"></div>
+  </aside>
 
-  <footer class="composer">
-    <input id="input" type="text" placeholder="Bir proje hakkında soru sor..."
-           autocomplete="off" aria-label="Soru" />
-    <button id="send" class="send-btn" aria-label="Gönder" title="Gönder">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
-        <path d="M12 19V5m0 0-7 7m7-7 7 7" stroke="#fff" stroke-width="2.4"
-              stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
-  </footer>
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-row">
+        <button class="menu-btn" id="menuBtn" aria-label="Repo panelini aç/kapat">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <div>
+          <h1>GitHub Asistanı</h1>
+          <p class="subtitle" id="subtitle">GitHub'daki projeler hakkında sor</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="targetbar">
+      <input id="target" type="text" placeholder="GitHub kullanıcı adı veya link (örn. kadiirgok)"
+             autocomplete="off" aria-label="GitHub hedefi" />
+      <button id="load" class="load-btn">Yükle</button>
+    </div>
+
+    <main class="chat" id="chat">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">
+          <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="#007AFF"
+               stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+          </svg>
+        </div>
+        <h2>Merhaba 👋</h2>
+        <p>Yukarıya bir GitHub kullanıcı adı veya linki yazıp "Yükle" de. Ardından o kişinin projeleri hakkında soru sorabilirsin.</p>
+      </div>
+    </main>
+
+    <footer class="composer">
+      <input id="input" type="text" placeholder="Bir proje hakkında soru sor..."
+             autocomplete="off" aria-label="Soru" />
+      <button id="send" class="send-btn" aria-label="Gönder" title="Gönder">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+          <path d="M12 19V5m0 0-7 7m7-7 7 7" stroke="#fff" stroke-width="2.4"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </footer>
+  </div>
 </div>
+<div class="backdrop" id="backdrop"></div>
 
 <script>
   const chat = document.getElementById('chat');
   const emptyState = document.getElementById('emptyState');
-  const chipsWrap = document.getElementById('chips');
+  const subtitle = document.getElementById('subtitle');
+  const targetInput = document.getElementById('target');
+  const loadBtn = document.getElementById('load');
   const input = document.getElementById('input');
   const sendBtn = document.getElementById('send');
+  const panel = document.getElementById('panel');
+  const profileSummary = document.getElementById('profileSummary');
+  const repoList = document.getElementById('repoList');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const refreshStatus = document.getElementById('refreshStatus');
+  const menuBtn = document.getElementById('menuBtn');
+  const backdrop = document.getElementById('backdrop');
 
-  // Küçük inline ikonlar (rozet için)
+  let loaded = false;
+
   const CHECK_ICON =
     '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" aria-hidden="true">' +
     '<path d="M3 8.5l3 3 7-7" stroke="currentColor" stroke-width="2" ' +
@@ -312,6 +486,12 @@
     '<path d="M8 2 1.5 13h13L8 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>' +
     '<path d="M8 6.5v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
     '<circle cx="8" cy="11" r="0.9" fill="currentColor"/></svg>';
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
 
   function hideEmpty() {
     if (emptyState) emptyState.style.display = 'none';
@@ -329,13 +509,18 @@
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    bubble.textContent = text;
+    if (role === 'assistant' && typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+      bubble.innerHTML = DOMPurify.sanitize(marked.parse(text, { breaks: true }));
+    } else {
+      bubble.textContent = text;
+    }
     row.appendChild(bubble);
 
-    // Yalnızca asistan cevaplarına kaynak/doğrulama rozeti ekle.
-    // "none" (bilgi yok) durumunda doğrulanacak bir kaynak olmadığı için rozet atlanır.
     if (role === 'assistant' && meta && meta.kaynak !== 'none') {
       row.appendChild(makeBadge(meta));
+    }
+    if (role === 'assistant' && meta) {
+      row.appendChild(makeCopyBtn(text));
     }
 
     chat.appendChild(row);
@@ -368,6 +553,19 @@
     return badge;
   }
 
+  function makeCopyBtn(text) {
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = 'Kopyala';
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = 'Kopyalandı';
+        setTimeout(() => { btn.textContent = 'Kopyala'; }, 1200);
+      }).catch(() => {});
+    });
+    return btn;
+  }
+
   function showTyping() {
     const row = document.createElement('div');
     row.className = 'msg-row assistant';
@@ -390,16 +588,133 @@
     if (el) el.remove();
   }
 
-  // Flutter'daki gibi: cevap gelene kadar tüm chip'ler + gönder butonu pasif.
   function setBusy(busy) {
     sendBtn.disabled = busy;
     input.disabled = busy;
-    chipsWrap.querySelectorAll('.chip').forEach((c) => { c.disabled = busy; });
+    loadBtn.disabled = busy;
+    targetInput.disabled = busy;
+  }
+
+  function renderProfile(d) {
+    const hedef = d.hedef || '';
+    const diller = d.diller || {};
+    const chips = Object.entries(diller).map(([lang, n]) =>
+      '<span class="chip">' + esc(lang) + ' (' + n + ')</span>').join('');
+
+    profileSummary.innerHTML =
+      (hedef ? '<div class="panel-title">' + esc(hedef) + '</div>' : '') +
+      '<div class="panel-stat">' + (d.repo_sayisi || 0) + ' repo · ★ ' +
+        (d.toplam_yildiz || 0) + '</div>' +
+      (chips ? '<div class="chips">' + chips + '</div>' : '');
+
+    const items = (d.repolar || []).map((r) => {
+      const title = r.html_url
+        ? '<a class="repo-name" href="' + esc(r.html_url) + '" target="_blank" rel="noopener">' + esc(r.name) + '</a>'
+        : '<span class="repo-name">' + esc(r.name) + '</span>';
+      const lang = r.language ? '<span class="repo-lang">' + esc(r.language) + '</span>' : '';
+      const stars = r.stars ? '<span class="repo-stars">★ ' + esc(r.stars) + '</span>' : '';
+      const desc = r.description ? '<div class="repo-desc">' + esc(r.description) + '</div>' : '';
+      return '<li class="repo-item">' + title +
+        '<div class="repo-meta">' + lang + stars + '</div>' + desc + '</li>';
+    }).join('');
+
+    repoList.innerHTML = items
+      ? '<ul class="repo-list">' + items + '</ul>'
+      : '<p style="font-size:13px;color:var(--muted);">Repo yok</p>';
+  }
+
+  async function loadProfile() {
+    try {
+      const res = await fetch('/profile');
+      if (!res.ok) return;
+      const d = await res.json();
+      loaded = true;
+      if (d.hedef) {
+        targetInput.value = d.hedef;
+        subtitle.textContent = d.hedef + ' · ' + d.repo_sayisi + ' repo yüklendi';
+      }
+      renderProfile(d);
+      hideEmpty();
+    } catch (err) { /* sunucu kapalıysa sessizce geç */ }
+  }
+
+  async function loadTarget() {
+    const hedef = targetInput.value.trim();
+    if (!hedef || loadBtn.disabled) return;
+
+    const eskiMetin = loadBtn.textContent;
+    loadBtn.disabled = true;
+    targetInput.disabled = true;
+    loadBtn.textContent = 'Yükleniyor…';
+    sendBtn.disabled = true;
+    input.disabled = true;
+    addMessage('assistant', '⏳ GitHub\'dan repolar çekiliyor, bu biraz sürebilir...');
+
+    try {
+      const res = await fetch('/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hedef })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const mesaj = data.mesaj || data.detail || ('HTTP ' + res.status);
+        subtitle.textContent = 'Hata: ' + mesaj;
+        addMessage('assistant', 'Yüklenemedi: ' + mesaj);
+      } else {
+        loaded = true;
+        subtitle.textContent = hedef + ' · ' + data.repo_sayisi + ' repo yüklendi';
+        addMessage('assistant', '✅ ' + data.repo_sayisi + ' repo yüklendi.');
+        await loadProfile();
+      }
+    } catch (err) {
+      subtitle.textContent = 'Bağlantı hatası';
+      addMessage('assistant', 'Bağlantı hatası: ' + err.message);
+    } finally {
+      loadBtn.disabled = false;
+      targetInput.disabled = false;
+      loadBtn.textContent = eskiMetin;
+      sendBtn.disabled = false;
+      input.disabled = false;
+      input.focus();
+    }
+  }
+
+  async function refreshTarget() {
+    if (!loaded) return;
+    refreshBtn.disabled = true;
+    refreshStatus.textContent = 'Kontrol ediliyor…';
+    try {
+      const res = await fetch('/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const d = await res.json();
+      if (d.guncel) {
+        refreshStatus.textContent = 'Zaten güncel';
+      } else {
+        refreshStatus.textContent = 'Eklendi: ' + (d.eklenen || []).length +
+          ' · Kaldırıldı: ' + (d.kaldirilan || []).length +
+          ' · Değişti: ' + (d.degisen || []).length;
+        subtitle.textContent = (d.hedef || '') + ' · ' + d.repo_sayisi + ' repo yüklendi';
+        await loadProfile();
+      }
+    } catch (err) {
+      refreshStatus.textContent = 'Hata: ' + err.message;
+    } finally {
+      refreshBtn.disabled = false;
+    }
   }
 
   async function send(question) {
     question = (question || input.value).trim();
     if (!question || sendBtn.disabled) return;
+
+    if (!loaded) {
+      addMessage('assistant', 'Önce yukarıya bir GitHub kullanıcı adı veya linki yazıp "Yükle" de.');
+      return;
+    }
 
     addMessage('user', question);
     input.value = '';
@@ -425,9 +740,17 @@
     }
   }
 
-  chipsWrap.addEventListener('click', (e) => {
-    const chip = e.target.closest('.chip');
-    if (chip) send(chip.textContent);
+  function setPanelOpen(open) {
+    panel.classList.toggle('open', open);
+    backdrop.classList.toggle('show', open);
+  }
+
+  loadBtn.addEventListener('click', loadTarget);
+  targetInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      loadTarget();
+    }
   });
 
   sendBtn.addEventListener('click', () => send());
@@ -437,6 +760,13 @@
       send();
     }
   });
+
+  refreshBtn.addEventListener('click', refreshTarget);
+  menuBtn.addEventListener('click', () => setPanelOpen(!panel.classList.contains('open')));
+  backdrop.addEventListener('click', () => setPanelOpen(false));
+
+  // Sayfa açılınca (sunucu yeniden başlamış olsa bile) yüklü hedefi geri getir.
+  loadProfile();
 </script>
 </body>
 </html>

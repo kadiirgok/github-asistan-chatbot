@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "github-rag"
+version = "0.1.0"
+description = "GitHub kullanıcısının repolarını okuyup soruları yanıtlayan RAG kütüphanesi (DeepSeek + Groq API)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "chromadb",
+    "sentence-transformers",
+    "fastapi",
+    "uvicorn",
+    "requests",
+    "ddgs",
+]
+
+[tool.setuptools.packages.find]
+include = ["github_rag*", "app*"]

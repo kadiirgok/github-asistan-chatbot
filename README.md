@@ -1,194 +1,159 @@
-# CV Asistanı — Yerel, Açık Kaynak RAG Chatbot
+# GitHub Asistanı (github-rag)
 
-Tamamen açık kaynak modellerle, herhangi bir dış API'ye bağımlı olmadan
-çalışan; kendi projelerim hakkında soru cevaplayan, halüsinasyon
-kontrolü olan bir RAG (Retrieval-Augmented Generation) chatbot sistemi.
+Bir GitHub kullanıcı adı veya linki ver; sistem o kişinin **repolarını ve README'lerini** otomatik çeker, indeksler ve projeleri hakkında soru sorabilmeni sağlar. README yetmezse **kaynak koda** geçer. DeepSeek + Groq API ile çalışır; `pip install` ile **kütüphane** gibi de import edilebilir.
 
-**Donanım:** Intel i3 9. nesil, 8GB RAM — GPU yok. Sistem, mütevazı
-donanımda çalışacak şekilde baştan tasarlandı.
+## 🔗 Canlı demo
 
----
+👉 **https://<kullanıcı-adı>-github-asistani.hf.space** _(deploy edince buraya gerçek linki yaz)_
 
-## Ne Yapıyor
+Yukarıdaki bağlantıya tıklayıp doğrudan deneyebilirsin; kurulum gerekmez. Yerel olarak çalıştırmak için aşağıdaki **Kurulum** bölümüne bak.
 
-Chatbot, GitHub'daki 4 projem hakkında soru cevaplıyor: **BilgiTR**
-(RAG projesi), **YorumTR** (Türkçe duygu analizi), **HizmetGelsin**
-(Flutter+ASP.NET Core uygulaması), **Telco Churn** (müşteri kaybı
-tahmini). Elindeki veride cevap yoksa internette arayıp öğreniyor;
-emin olmadığında asla uydurmuyor, dürüstçe kaynağı gösteriyor.
+## Özellikler
 
----
+- 🔗 **Dinamik GitHub** — kullanıcı adı / repo linki → repo + README'ler otomatik çekilir (GitHub API).
+- 🧠 **İki katmanlı RAG** — `README → (yetmezse) Kod → (hiç yoksa) Web`.
+- 💬 **Takip soruları** — "hizmet gelsin ne işe yarıyor?" → "özellikleri neler?" gibi repo adı olmayan devam soruları önceki repoya bağlanır.
+- 🔢 **Meta sorular** — "kaç repo var?", "hangi projeler var?" doğrudan indeksten cevaplanır.
+- ✅ **3 katmanlı doğrulama** — sayı tutarlılığı, eksik değer, konu uyumu; asla sessizce yanlış bilgi vermez.
+- 🔌 **DeepSeek + Groq** — OpenAI-uyumlu API; DeepSeek birincil, Groq yedek; geçici hatalarda otomatik yeniden dener.
 
-## Mimari
+## Nasıl çalışır
 
-```mermaid
-flowchart TD
-    A["Kullanıcı Sorusu<br/>Web UI · Flutter"] --> B["FastAPI /chat<br/>src/api.py"]
-    B --> C["generate_answer<br/>src/rag.py"]
-
-    C --> D["Retrieval<br/>retrieval_araci()"]
-    D --> D1["Soru Embedding<br/>Türkçe BERT"]
-    D1 --> D2["ChromaDB query<br/>top_k=4 · source != web"]
-    D2 --> D3["Mesafe eşiği (490)"]
-    D3 --> D4["Kaynak çoğunluk oyu<br/>+ leksikal tie-break"]
-
-    D4 -- "bağlam var" --> E["Konu uyumu kontrolü<br/>dogrula_konu_uyumu()"]
-    D4 -- "bağlam yok" --> G["Web fallback<br/>web_search_araci() · DuckDuckGo"]
-
-    E -- "uyumlu" --> F["LLM<br/>Qwen2.5-3B · llama.cpp"]
-    E -- "uyumsuz" --> X["Cevap: bilgi yok<br/>kaynak = none"]
-
-    G -- "sonuç var" --> H["Konu uyumu kontrolü<br/>dogrula_konu_uyumu()"]
-    G -- "sonuç yok" --> X
-    H -- "uyumlu" --> I["LLM (web prompt)<br/>temperature = 0"]
-    H -- "uyumsuz" --> X
-
-    F --> J["Doğrulama ağı<br/>sayısal tutarlılık + eksik değer"]
-    I --> J
-
-    J -- "geçti" --> K["Cevap + şeffaf rozet<br/>kaynak · dogrulandi"]
-    J -- "başarısız" --> L["Ham kaynak fallback<br/>dogrulandi = false"]
-
-    K --> M["Yanıt<br/>cevap · kaynak · sure_saniye · dogrulandi"]
-    L --> M
-    X --> M
+```
+GitHub kullanıcı adı / link
+        │
+        ▼
+   GitHub API: repo listesi + README'ler            (github_rag/github.py)
+        │
+        ▼
+   README'ler chunk'lanır, çok dilli embedding ile vektöre çevrilir,
+   kullanıcı başına ayrı koleksiyonda ChromaDB'ye yazılır  (github_rag/indexing.py)
+        │
+        ▼
+   Soru → en alakalı chunk'lar (cosine + repo çoğunluk oyu)   (github_rag/retrieval.py)
+        │
+        ├─ README'de doğrulanmış cevap var → cevabı döndür
+        │
+        ├─ Yetmediyse ve soru bir repoyu adlandırıyorsa →
+        │      o reponun KAYNAK KODU çekilir + indekslenir → koddan cevap
+        │
+        └─ Hiç yoksa → DuckDuckGo (web) fallback
+        │
+        ▼
+   DeepSeek/Groq LLM bağlama dayanarak cevap üretir   (github_rag/answer.py)
+        │
+        ▼
+   3 katmanlı doğrulama (sayı / eksik değer / konu uyumu)
+        │
+        ▼
+   Cevap + şeffaf rozet: kaynak (local/web/none), doğrulandı, süre
 ```
 
-Akış uçtan uca: soru `src/api.py` içindeki `/chat` uç noktasına gelir,
-iş mantığı `src/rag.py` içindeki `generate_answer()` fonksiyonunda
-yürütülür. Önce yerel vektör deposunda (ChromaDB) arama yapılır;
-alakalı bağlam yoksa DuckDuckGo üzerinden web fallback'e geçilir. Her
-iki yolda da üretilen cevap, modele gönderilmeden önce konu uyumu,
-sonrasında ise sayısal tutarlılık + eksik değer kontrollerinden geçer.
+Doğrulanamayan cevap da gösterilir ama "Doğrulanamadı" rozetiyle işaretlenir (sayı tutarlılığı / konu uyumu denetimi).
 
-**Bileşenler:** FastAPI (HTTP + statik arayüz) · ChromaDB (kalıcı vektör
-deposu) · Türkçe BERT embedding · llama.cpp üzerinden Qwen2.5-3B ·
-DuckDuckGo (ddgs) · üç katmanlı doğrulama ağı.
-
----
-
-## Teknik Kararlar ve Gerekçeleri
-
-### Model seçimi: Qwen2.5-3B-Instruct
-
-Üç model (1.5B / 3B / 7B) gerçek ölçümlerle karşılaştırıldı:
-
-| Model | Süre | Sonuç |
-|---|---|---|
-| 1.5B | ~23 sn | Çoklu/sayısal değerleri sık kaçırıyor |
-| **3B** | **~30-60 sn** | Doğruluk yeterli, hız kabul edilebilir — **seçilen** |
-| 7B | ~2.5-3.5 dk | En doğru ama i3'te kullanılamayacak kadar yavaş |
-
-7B'nin yavaşlığının RAM değil **CPU hesaplama gücü** darboğazı olduğu
-ayrıca doğrulandı — RAM optimizasyonları hıza etki etmedi.
-
-### Embedding modeli: Türkçe'ye özel BERT
-
-Üç aday (MiniLM, mpnet, Türkçe BERT) karşılaştırıldı; Türkçe'ye özel
-eğitilen model, konu/şehir ayrımını en doğru yapan model çıktı.
-Mesafe eşiği (490), gerçek ölçümlere bakılarak kalibre edildi.
-
-### Halüsinasyon kontrolü — 3 katman
-
-1. **Sayısal tutarlılık** — cevaptaki sayılar kaynakta var mı?
-2. **Eksik değer tespiti** — kaynaktaki bir liste (örn. 3 skor) cevaba
-   eksik mi yansıdı?
-3. **Konu uyumu** — cevap gerçekten sorulan konuyla mı ilgili? (Bu,
-   modelin alakasız bir web sonucundan "kendinden emin ama yanlış"
-   bir cevap üretmesini engelliyor.)
-
-Herhangi biri başarısız olursa, sistem cevabı reddedip ham kaynağı
-(doğru dosyadan, açıkça etiketlenmiş) gösteriyor — asla sessizce
-yanlış bilgi vermiyor.
-
-### Kaynak karışması düzeltmesi
-
-Embedding modelinin L2 mesafesi bazen yanlış dökümanı "yakın"
-gösterebiliyordu. Çözüm: chunk'lar önce kaynak dosyaya göre
-gruplanıp çoğunluk oyuyla karar veriliyor; beraberlik durumunda
-sorudaki anahtar kelimelere bakan bir tie-break devreye giriyor.
-
-### Web fallback + cache
-
-Yerelde bulunamayan sorular internette aranıyor (DuckDuckGo, API key
-gerektirmez); öğrenilen bilgi kalıcı olarak kaydediliyor, böylece
-aynı soru ikinci kez sorulduğunda 3-4 kat daha hızlı yanıtlanıyor.
-
----
-
-## Arayüzler
-
-- **Web arayüzü** — FastAPI'nin aynı içinden servis edilen, tek
-  dosyalık, Apple/iMessage tarzında tasarlanmış bir sohbet arayüzü.
-- **Flutter mobil uygulama** — aynı tasarım diliyle, gerçek bir
-  Android cihazda uçtan uca test edildi.
-
-İkisi de aynı `/chat` API'sini kullanıyor; her cevabın altında kaynağı
-(local/web) ve doğrulama durumunu gösteren şeffaf bir rozet var.
-
----
-
-## Mobil Uygulama
-
-Flutter ile yazılmış mobil uygulama, bu repodaki `mobile/` klasöründe
-durur. Apple/iMessage tarzı bir sohbet arayüzüne sahiptir ve backend'in
-aynı `/chat` API'sine bağlanır. Çalıştırmak için:
+## Kurulum
 
 ```bash
-cd mobile
-flutter run
+# 1) Ortam oluştur (varsa atla)
+python -m venv venv
+venv\Scripts\activate            # Windows
+
+# 2) Bağımlılıkları kur
+pip install -r requirements.txt
+
+# 3) (İsteğe bağlı) paketi kütüphane olarak kur
+pip install -e .
 ```
 
-> Backend adresi `mobile/lib/api_service.dart` içindeki `apiBaseUrl`
-> alanından ayarlanır (varsayılan `http://10.0.2.2:8000` — Android
-> emülatörü içindir). Gerçek bir cihazda test ederken bu adresi
-> bilgisayarının ağ IP'si ile değiştir.
+## Kütüphane olarak kullanım
 
----
+```python
+from github_rag import GithubRag
 
-## Kullanılan Teknolojiler
+# Bir kullanıcıyı veya tek repo linkini indeksle
+rag = GithubRag.from_github("kadiirgok")        # veya "https://github.com/kadiirgok/bilgi-tr"
 
-**Model & RAG:** Qwen2.5-3B-Instruct (GGUF, q4_k_m), llama-cpp-python,
-ChromaDB, Türkçe BERT embedding (sentence-transformers)
+# Soru sor
+res = rag.ask("hangi dillerde yazılmış?")
+print(res["cevap"])            # akıcı cevap
+print(res["kaynak"])           # "local" | "web" | "none"
+print(res["dogrulandi"])       # doğrulama sonucu
+```
 
-**Backend:** Python, FastAPI, uvicorn
+Yerel `.txt` klasörünü (örnek veri / test) indekslemek için: `GithubRag.from_local_folder("data")`.
 
-**Web arayüzü:** Saf HTML/CSS/JS (framework yok), Google Fonts (Inter)
+## Web arayüzü
 
-**Mobil:** Flutter, Dart, http paketi
+```bash
+uvicorn app.api:app --reload
+```
 
-**Diğer:** DuckDuckGo arama (ddgs), Hugging Face Hub
+Tarayıcıda `http://127.0.0.1:8000` aç → GitHub kullanıcı adı/linki yaz → **Yükle** → soru sor.
 
----
+### API uç noktaları
 
-## Bilinen Sınırlamalar
+| Metod | Yol | Gövde | Yanıt |
+|---|---|---|---|
+| GET | `/health` | — | `{"durum": "hazir"}` |
+| POST | `/ingest` | `{"hedef": "kadiirgok", "force": false}` | `{"durum","hedef","repo_sayisi","repolar","sure_saniye"}` |
+| POST | `/chat` | `{"soru": "..."}` | `{"cevap","kaynak","sure_saniye","dogrulandi"}` |
+| GET | `/repos` | — | `{"durum","hedef","repolar"}` |
+| GET | `/profile` | — | `{"durum","repo_sayisi","diller","toplam_yildiz","repolar"}` |
+| GET | `/check-updates` | — | `{"durum","eklenen","kaldirilan","degisen","guncel"}` |
+| POST | `/refresh` | `{"hedef": ""}` | `{"durum","eklenen","kaldirilan","degisen","guncel","repo_sayisi"}` |
 
-Bu bölüm bilinçli olarak burada — hangi kararların trade-off
-olduğunu şeffafça belirtmek, hangi alanların geliştirmeye açık
-olduğunu göstermek için:
+## Yapılandırma (`.env`)
 
-- **Cross-document sorular** (birden fazla projeyi karşılaştıran
-  sorular) şu an tek dökümana daralıyor — kaynak karışması
-  düzeltmesinin bilinçli bir trade-off'u.
-- **Cosine mesafeye geçiş** yapılmadı; mevcut leksikal tie-break bir
-  yama, kök neden (L2 mesafesinin embedding normalizasyonuna
-  duyarlılığı) hâlâ duruyor.
-- **Segmentation fault riski** — llama.cpp'nin C++ katmanında, bellek
-  baskısı altında nadiren oluşan bir kararsızlık. Python seviyesinde
-  yakalanamıyor; etkisi `n_threads` düşürülerek azaltıldı ama kök
-  neden (8GB RAM sınırı) tam çözülmedi.
-- **Cache eskime mantığı yok** — web'den öğrenilen bilgiler (döviz
-  kuru gibi değişkenler) süresiz cache'de kalıyor.
-- **Agent/function-calling** denendi (model kendi karar versin diye)
-  ama 1.5B modelde güvenilir çıkmadığı için production'da
-  kullanılmıyor; kod duruyor, ileride değerlendirilebilir.
+`.env.example` dosyasını `.env` olarak kopyala; tüm değerler isteğe bağlıdır:
 
----
+| Değişken | Varsayılan | Açıklama |
+|---|---|---|
+| `DEEPSEEK_API_KEY` | (yok) | DeepSeek API anahtarı (birincil) |
+| `DEEPSEEK_MODEL` | `deepseek-chat` | DeepSeek modeli |
+| `GROQ_API_KEY` | (yok) | Groq API anahtarı (yedek, boş bırakılabilir) |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq modeli |
+| `GITHUB_TOKEN` | (yok) | GitHub API limitini 60/saat → 5000/saat yapar |
+| `GITHUB_RAG_EMBEDDING_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | Çok dilli embedding |
+| `GITHUB_RAG_MAX_TOKENS` | `512` | LLM cevap uzunluğu |
 
-## Neden Bu Proje
+## LLM arka ucu (DeepSeek + Groq)
 
-Bu proje, bir model API'sine sarmalayıcı yazmak değil — sıfırdan,
-her adımı ölçerek, test ederek ve gerektiğinde geri dönüp düzelterek
-kurulmuş bir sistem. Model boyutu seçiminden embedding kalibrasyonuna,
-halüsinasyon kontrolünden kaynak doğrulamaya kadar her karar gerçek
-verilerle destekleniyor ve nedenleri belgelenmiş durumda.
+Uygulama OpenAI-uyumlu API'leri kullanır: **DeepSeek birincil, Groq yedek**. Anahtarı
+ayarlı olmayan sağlayıcı atlanır. Geçici hatalarda (HTTP 429/5xx, zaman aşımı, boş yanıt)
+arka uç otomatik yeniden dener; kalıcı hatalarda (401/403) sıradaki sağlayıcıya geçer.
+Yedek zincir altyapısı `llm/fallback.py` ve `llm/openai_compat.py` üzerinde kuruludur.
+
+## Proje yapısı
+
+```
+github_rag/            # kütüphane (import edilebilir)
+├── __init__.py        #   GithubRag (iki katmanlı akış + takip bağlamı)
+├── config.py          #   ayarlar + .env
+├── github.py          #   GitHub API: repo/README + kaynak kod çekme
+├── indexing.py        #   chunk + embedding + ChromaDB
+├── retrieval.py       #   vektör arama + eşik + repo çoğunluk oyu
+├── validation.py      #   3 katmanlı doğrulama
+├── answer.py          #   RAG orkestrasyonu + web fallback
+├── prompts.py         #   prompt şablonları
+├── web_search.py      #   DuckDuckGo fallback
+└── llm/               #   LLM arka ucu (DeepSeek + Groq)
+app/                   # FastAPI + statik arayüz
+static/                # tek dosyalık web UI
+```
+
+## Deploy (Hugging Face Spaces)
+
+Anahtar GitHub'a **girmez**; uygulama HF Spaces'ta çalışır, kullanıcılar sadece linke tıklar.
+
+1. Hugging Face'te ücretsiz hesap aç → **New Space** (SDK: **Docker**, Visibility: **Public**).
+2. Space **Settings → Variables and secrets** → `DEEPSEEK_API_KEY` (ve istersen `GROQ_API_KEY`, `GITHUB_TOKEN`) ekle.
+3. Space'i bu GitHub repo'suna bağla (veya Space'in kendi git'ine push et). `Dockerfile` otomatik build eder.
+4. Deploy bitince linkini README'nin üstündeki **Canlı demo** bölümüne yaz.
+
+## Notlar / bilinen sınırlar
+
+- Çapraz repo karşılaştırma soruları ("A ile B'yi karşılaştır") tek repoya iner.
+- Kod okuma repo başına bir kez yapılır (önbellekli); büyük repolar için `config.py` içindeki `code_max_files` / `code_max_size` sınırları uygulanır.
+- GitHub API token'sız 60 istek/saat ile sınırlıdır; büyük hesaplar için `GITHUB_TOKEN` önerilir.
+- İlk kez okunan bir reponun kaynak kodu bir kez çekilip indekslenir (sonra önbellekten hızlı).
+- Yüklenen hedef sunucu yeniden başlasa da ChromaDB'den geri yüklenir; `/refresh` ile GitHub'daki değişiklikler çekilir.

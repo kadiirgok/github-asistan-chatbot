@@ -1,16 +1,7 @@
-# Qwen2.5 modelini CPU üzerinde çalıştırmak için llama.cpp'nin Python bağlayıcısı.
-# NOT: PyPI'da Windows için hazır (binary) wheel YOKTUR — sadece kaynak kod vardır ve
-# Windows'ta kaynaktan derleme hata verir. Bu yüzden resmi GitHub sürümündeki
-# CPU-only (GPU'suz) hazır wheel kullanılır. Intel i3 9. nesil / 8 GB RAM için uygundur.
-llama-cpp-python @ https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.35/llama_cpp_python-0.3.35-py3-none-win_amd64.whl
-
-# Modeli Hugging Face'ten indirmek için resmi kütüphane
-huggingface_hub
-
 # RAG: chunk embedding'lerini saklamak ve sorgulamak için vektör veritabanı
 chromadb
 
-# RAG: metni vektöre çeviren embedding modeli (Türkçe destekli, CPU'da çalışır)
+# RAG: metni vektöre çeviren embedding modeli (çok dilli, CPU'da çalışır)
 sentence-transformers
 
 # HTTP API katmanı (chatbot'u servis etmek için)
@@ -18,6 +9,9 @@ fastapi
 
 # ASGI sunucusu (FastAPI uygulamasını çalıştırmak için)
 uvicorn
+
+# GitHub API istemcisi (repo + README çekmek için)
+requests
 
 # Web arama fallback: DuckDuckGo arama kütüphanesi (API key gerektirmez, ücretsiz)
 ddgs

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Web arama fallback modülü.
+"""Web arama fallback modülü.
 
 Local RAG DB'de cevap bulunamadığında devreye girer: ddgs (DuckDuckGo) ile
 soruyu internette arar ve en alakalı sonuçların başlık + özet kısmını tek bir
@@ -20,15 +19,11 @@ def web_search_araci(soru: str, max_sonuc: int = 2) -> str:
     """Soruyu DuckDuckGo'da arar, en alakalı `max_sonuc` sonucu birleştirip döndürür.
 
     Her sonuç "Kaynak N: <title>\\nÖzet: <body>" biçiminde numaralandırılarak
-    eklenir; sonuçlar aralarında boş satır olacak şekilde birleştirilir. Arama
-    başarısız olursa (internet yok, timeout, istisna) boş string döner ve hatayı loglar.
-
-    Not: embedding modelimiz Türkçe odaklı olduğu için region="tr-tr" ile Türkçe
-    sonuçlar istenir; bu, sonucun ileride local'de tekrar bulunmasını kolaylaştırır.
+    eklenir. Arama başarısız olursa boş string döner ve hatayı loglar.
     """
     try:
         with DDGS() as ddgs:
-            sonuclar = ddgs.text(soru, max_results=max_sonuc, region="tr-tr")
+            sonuclar = ddgs.text(soru, max_results=max_sonuc, region="wt-wt")
     except Exception as exc:  # noqa: BLE001 — ağ/bağlantı hatalarını yutup logla
         logger.warning("Web araması başarısız (soru: %r): %s", soru, exc)
         return ""
