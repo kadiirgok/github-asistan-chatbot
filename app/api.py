@@ -4,7 +4,9 @@
 İş mantığı github_rag paketindedir; bu dosya yalnızca HTTP tarafını içerir.
 """
 
+import os
 import sys
+import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -49,19 +51,30 @@ def _load_last_target() -> str | None:
     return None
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Son yüklenen hedefi ChromaDB'den (cache) geri kur — GitHub çağrısı yapmaz.
+def _varsayilan_hedef() -> str:
+    """Açılışta otomatik yüklenecek hesap (HF diski geçici olduğundan yeniden başlatmada gerekir)."""
+    return os.environ.get("GITHUB_RAG_DEFAULT_TARGET", "kadiirgok").strip()
+
+
+def _otomatik_yukle() -> None:
+    """Son hedefi cache'ten, yoksa varsayılan hedefi GitHub'dan yükler (arka planda)."""
     global active_rag
-    hedef = _load_last_target()
-    if hedef:
+    for hedef in filter(None, [_load_last_target(), _varsayilan_hedef()]):
         try:
             rag = GithubRag(config=config)
-            rag.index(hedef)  # koleksiyon dolu -> cache dalı
+            rag.index(hedef)  # cache doluysa GitHub'a gitmez
             active_rag = rag
-            print(f"Son hedef yeniden yüklendi: {hedef}")
-        except Exception as exc:  # noqa: BLE001 — bozuk işaret dosyası startup'ı çökertmesin
-            print(f"Son hedef yüklenemedi ({hedef}): {exc}")
+            _save_last_target(hedef)
+            print(f"Hedef yüklendi: {hedef}")
+            return
+        except Exception as exc:  # noqa: BLE001 — bir hedef başarısızsa diğerini dene
+            print(f"Hedef yüklenemedi ({hedef}): {exc}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Sunucu hemen açılır; yükleme arka planda sürer (sağlık kontrolü zaman aşımına uğramasın).
+    threading.Thread(target=_otomatik_yukle, daemon=True).start()
     yield
 
 
@@ -96,9 +109,25 @@ class CevapResponse(BaseModel):
     dogrulandi: bool
 
 
+def _github_durumu() -> dict:
+    """GITHUB_TOKEN'ın geçerli olup olmadığını ve kalan API limitini bildirir (token değeri açılmaz)."""
+    import requests
+    tok = config.github_token
+    try:
+        r = requests.get("https://api.github.com/rate_limit", timeout=10,
+                         headers={"Authorization": f"Bearer {tok}"} if tok else {})
+        core = r.json().get("resources", {}).get("core", {}) if r.ok else {}
+        return {"token_var": bool(tok), "token_uzunluk": len(tok), "http": r.status_code,
+                "gecerli": bool(tok) and r.status_code == 200 and core.get("limit", 0) > 60,
+                "limit": core.get("limit"), "kalan": core.get("remaining")}
+    except Exception as exc:  # noqa: BLE001
+        return {"token_var": bool(tok), "hata": str(exc)[:100]}
+
+
 @app.get("/health")
 def health():
     return {
+        "github": _github_durumu(),
         "durum": "hazir",
         "llm": {
             "deepseek": bool(config.deepseek_api_key),

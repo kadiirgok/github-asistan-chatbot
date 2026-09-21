@@ -245,6 +245,15 @@ class GithubRag:
         Bu sorular LLM'e/web'e gitmemeli: cevap zaten elimizdeki metadata'da.
         """
         s = soru.lower()
+        # 0) Yıldız / popülerlik / en yeni-en eski (metadata'dan, deterministik)
+        if any(k in s for k in ("yıldız", "yildiz", "star", "popüler", "populer", "fork")):
+            return self._yildiz_cevabi()
+        if any(k in s for k in ("en son", "en yeni", "son güncellen", "son guncellen"))                 and ("proj" in s or "repo" in s):
+            return self._en_yeni_cevabi()
+        # 0b) Gizli/özel repolar: yalnızca herkese açık repolar okunur
+        if any(k in s for k in ("gizli", "özel repo", "ozel repo", "private")):
+            return ("Yalnızca herkese açık (public) repolar okunabiliyor; gizli/özel repolar "
+                    f"görünmez. Şu an {self.repo_sayisi} herkese açık repo yüklü.")
         # 1) Dil / ilgi alanı özeti (repo metadata'sından, deterministik)
         if any(k in s for k in ("alan", "dil", "diller", "ilgilen", "konu",
                                 "neyi", "neyle", "neler yapmış", "neler yapmis")):
@@ -256,6 +265,32 @@ class GithubRag:
             if any(k in s for k in ("hangi", "listele", "listesi", "neler")):
                 return self._repo_listesi()
         return None
+
+    def _yildiz_cevabi(self) -> str:
+        """Yıldız sayısına göre sıralı ilk repolar."""
+        sirali = sorted(self.repo_metadata, key=lambda m: -(m.get("stars", 0) or 0))
+        if not sirali:
+            return "Henüz repo bilgisi yüklenmedi."
+        toplam = sum(m.get("stars", 0) or 0 for m in sirali)
+        if toplam == 0:
+            return "Hiçbir repo henüz yıldız almamış (toplam 0 yıldız)."
+        satirlar = [f"En çok yıldız alan: **{sirali[0].get('name')}** "
+                    f"({sirali[0].get('stars', 0)} yıldız). Toplam {toplam} yıldız.", "",
+                    "İlk repolar:"]
+        for m in sirali[:5]:
+            if (m.get("stars", 0) or 0) > 0:
+                satirlar.append(f"- {m.get('name')} · {m.get('stars')} yıldız")
+        return "\n".join(satirlar)
+
+    def _en_yeni_cevabi(self) -> str:
+        """Son güncellenen repolar."""
+        sirali = sorted(self.repo_metadata, key=lambda m: m.get("updated_at", ""), reverse=True)
+        if not sirali:
+            return "Henüz repo bilgisi yüklenmedi."
+        satirlar = ["Son güncellenen repolar:"]
+        for m in sirali[:5]:
+            satirlar.append(f"- {m.get('name')} · {(m.get('updated_at') or '')[:10]}")
+        return "\n".join(satirlar)
 
     def _repo_listesi(self) -> str:
         """Repo adları + dil + kısa açıklama içeren zengin liste döndürür."""
@@ -397,9 +432,21 @@ class GithubRag:
                 return {"cevap": meta_desc, "kaynak": "local",
                         "sure_saniye": round(time.time() - t0, 3), "dogrulandi": True}
 
-        # 5) Web fallback
+        # 5) Web fallback (yalnızca hesapla ilgisiz genel sorular için)
+        if self._hesap_sorusu(soru):
+            return {"cevap": "Yüklenen hesabın repolarında bu bilgiyi bulamadım. "
+                             "Bir repo adıyla (örn. \"<repo> ne işe yarıyor?\") sorabilirsin.",
+                    "kaynak": "none", "sure_saniye": round(time.time() - t0, 3),
+                    "dogrulandi": True}
         return self._yanit(
             answer_from_web(self.llm, soru, self.bilinen_anahtarlar, cfg.max_tokens), t0)
+
+    @staticmethod
+    def _hesap_sorusu(soru: str) -> bool:
+        """Soru yüklü hesap/repo hakkında mı? (web araması anlamsız olur)"""
+        s = soru.lower()
+        return any(k in s for k in ("repo", "proje", "projeler", "hesab", "github",
+                                    "kodları", "kodlari", "bu proje"))
 
     def _yanit(self, res: tuple[str, str, bool], t0: float) -> dict:
         cevap, kaynak, dogrulandi = res

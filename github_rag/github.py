@@ -6,6 +6,7 @@ saatlik istek limiti 60'tan 5000'e çıkar; token yoksa da temel kullanım çal�
 """
 
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -29,11 +30,18 @@ def resolve_target(target: str) -> dict:
     t = t.removeprefix("github.com/").strip("/")
 
     parts = [p for p in t.split("/") if p]
+    if not parts or not all(_GECERLI_AD.match(p) for p in parts[:2]):
+        raise ValueError(
+            "Geçerli bir GitHub kullanıcı adı veya link girin (örn. kadiirgok). "
+            "Soru sormak için alttaki sohbet kutusunu kullanın.")
     if len(parts) == 1:
         return {"kind": "user", "owner": parts[0], "repo": None}
     if len(parts) >= 2:
         return {"kind": "repo", "owner": parts[0], "repo": parts[1]}
     raise ValueError(f"Geçersiz GitHub hedefi: {target!r}")
+
+
+_GECERLI_AD = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,99})$")
 
 
 def _headers(token: str) -> dict:
@@ -43,14 +51,35 @@ def _headers(token: str) -> dict:
     return h
 
 
+_token_uyarildi = False
+
+
+def _get(url: str, token: str = "", headers: dict | None = None, **kw) -> requests.Response:
+    """GET isteği; token süresi dolmuş/geçersizse (401) tokensiz yeniden dener.
+
+    Herkese açık veriler token'sız da okunur (60 istek/saat); böylece süresi biten
+    bir token tüm sistemi çökertmez, yalnızca limiti düşürür.
+    """
+    global _token_uyarildi
+    h = {**_headers(token), **(headers or {})}
+    resp = requests.get(url, headers=h, **kw)
+    if resp.status_code == 401 and token:
+        if not _token_uyarildi:
+            print("UYARI: GITHUB_TOKEN geçersiz veya süresi dolmuş (401); "
+                  "tokensiz devam ediliyor. Yeni token oluşturup güncelleyin.")
+            _token_uyarildi = True
+        h = {**_headers(""), **(headers or {})}
+        resp = requests.get(url, headers=h, **kw)
+    return resp
+
+
 def list_repos(user: str, token: str = "") -> list[dict]:
     """Kullanıcının (fork hariç) repolarını döndürür: [{name, full_name, html_url}]."""
     repos = []
     page = 1
     while True:
-        resp = requests.get(
-            f"{GITHUB_API}/users/{user}/repos",
-            headers=_headers(token),
+        resp = _get(
+            f"{GITHUB_API}/users/{user}/repos", token,
             params={"per_page": 100, "page": page, "type": "owner", "sort": "updated"},
             timeout=30,
         )
@@ -58,7 +87,7 @@ def list_repos(user: str, token: str = "") -> list[dict]:
             raise ValueError(f"GitHub kullanıcısı bulunamadı: {user}")
         if resp.status_code == 403:
             raise RuntimeError(
-                "GitHub API limiti aşıldı (403). .env dosyasına GITHUB_TOKEN ekleyerek "
+                "GitHub API limiti aşıldı (403). Geçerli bir GITHUB_TOKEN ekleyerek "
                 "limiti 60/saat yerine 5000/saat'e çıkarın."
             )
         resp.raise_for_status()
@@ -74,11 +103,8 @@ def list_repos(user: str, token: str = "") -> list[dict]:
 
 def fetch_readme(owner: str, repo: str, token: str = "") -> str | None:
     """Repo'nun README metnini döndürür; yoksa None."""
-    resp = requests.get(
-        f"{GITHUB_API}/repos/{owner}/{repo}/readme",
-        headers={**_headers(token), "Accept": "application/vnd.github.raw"},
-        timeout=30,
-    )
+    resp = _get(f"{GITHUB_API}/repos/{owner}/{repo}/readme", token,
+                headers={"Accept": "application/vnd.github.raw"}, timeout=30)
     if resp.status_code in (404, 204):
         return None
     resp.raise_for_status()
@@ -126,8 +152,7 @@ def _repo_metadata(r: dict) -> dict:
 
 def fetch_repo_metadata(owner: str, repo: str, token: str = "") -> dict | None:
     """Tek reponun metadata'sını döndürür; bulunamazsa None."""
-    resp = requests.get(f"{GITHUB_API}/repos/{owner}/{repo}",
-                        headers=_headers(token), timeout=30)
+    resp = _get(f"{GITHUB_API}/repos/{owner}/{repo}", token, timeout=30)
     if resp.status_code != 200:
         return None
     return _repo_metadata(resp.json())
@@ -200,8 +225,7 @@ EXCLUDED_FILENAMES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml",
 
 
 def _default_branch(owner: str, repo: str, token: str = "") -> str:
-    resp = requests.get(f"{GITHUB_API}/repos/{owner}/{repo}",
-                        headers=_headers(token), timeout=30)
+    resp = _get(f"{GITHUB_API}/repos/{owner}/{repo}", token, timeout=30)
     resp.raise_for_status()
     return resp.json().get("default_branch", "main")
 
@@ -249,10 +273,9 @@ def ingest_code(owner: str, repo: str, token: str = "",
     """
     branch = _default_branch(owner, repo, token)
 
-    tree_resp = requests.get(
+    tree_resp = _get(
         f"{GITHUB_API}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1",
-        headers=_headers(token), timeout=60,
-    )
+        token, timeout=60)
     tree_resp.raise_for_status()
     tree = tree_resp.json().get("tree", [])
 
